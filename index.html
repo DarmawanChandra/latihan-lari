@@ -13,6 +13,8 @@
   <link rel="icon" href="ikon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="ikon-192.png">
   <title>Latihan Lari</title>
+  <!-- Peta rute: Leaflet (folder vendor) + gambar peta dari OpenStreetMap -->
+  <link rel="stylesheet" href="vendor/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -71,7 +73,7 @@
         <label class="baris-atur"><span><b>Suara pemandu</b><small>Aba-aba "lari" dan "jalan"</small></span><input type="checkbox" class="saklar" role="switch" data-atur="suara"></label>
         <label class="baris-atur"><span><b>Bunyi bip</b><small>Hitung mundur 3 detik sebelum ganti</small></span><input type="checkbox" class="saklar" role="switch" data-atur="bip"></label>
         <label class="baris-atur"><span><b>Getar</b><small>HP bergetar saat ganti lari atau jalan</small></span><input type="checkbox" class="saklar" role="switch" data-atur="getar"></label>
-        <label class="baris-atur"><span><b>GPS</b><small>Hitung jarak dan pace</small></span><input type="checkbox" class="saklar" role="switch" data-atur="gps"></label>
+        <label class="baris-atur"><span><b>GPS</b><small>Hitung jarak, pace, dan peta rute</small></span><input type="checkbox" class="saklar" role="switch" data-atur="gps"></label>
       </div>
       <button type="button" class="btn penuh" id="btn-tes-suara">Tes suara</button>
 
@@ -96,7 +98,7 @@
       </div>
 
       <button type="button" class="btn bahaya penuh" id="btn-hapus-semua">Hapus semua data</button>
-      <p class="info-kecil tengah">Latihan Lari versi 1</p>
+      <p class="info-kecil tengah">Latihan Lari versi 2</p>
     </section>
   </main>
 
@@ -140,6 +142,7 @@
       <button type="button" id="lt-utama" class="lt-utama">Mulai</button>
       <div class="lt-tombol-kecil">
         <button type="button" id="lt-lewati">Lewati</button>
+        <button type="button" id="lt-peta" hidden>Peta</button>
         <button type="button" id="lt-selesai">Selesai</button>
       </div>
     </div>
@@ -169,6 +172,8 @@
         <div class="angka"><span>Jarak</span><b id="hasil-jarak">–</b></div>
         <div class="angka"><span>Pace /km</span><b id="hasil-pace">–</b></div>
       </div>
+      <div id="hasil-peta" class="peta" hidden></div>
+      <p class="info-kecil" id="hasil-peta-pesan" hidden></p>
       <fieldset class="pilih-rasa">
         <legend>Rasanya gimana?</legend>
         <label><input type="radio" name="rasa" value="ringan"><span>Ringan</span></label>
@@ -186,9 +191,28 @@
     </div>
   </dialog>
 
+  <!-- Jendela peta rute (dari riwayat, atau saat latihan berjalan) -->
+  <dialog id="dlg-peta">
+    <div class="isi-dialog">
+      <h3 id="peta-judul">Rute</h3>
+      <p class="info-kecil" id="peta-sub"></p>
+      <div id="peta-besar" class="peta besar"></div>
+      <p class="info-kecil" id="peta-pesan" hidden></p>
+      <p class="peta-ket">
+        <span class="titik-ket" data-warna="hijau">Mulai</span>
+        <span class="titik-ket" id="ket-akhir">Selesai</span>
+        <span class="titik-ket" data-warna="biru" id="ket-posisi" hidden>Posisimu</span>
+      </p>
+      <div class="baris-tombol kanan">
+        <button type="button" class="btn utama" id="peta-tutup" autofocus>Tutup</button>
+      </div>
+    </div>
+  </dialog>
+
   <!-- Pesan singkat di bawah layar -->
   <div id="kabar" class="kabar" role="status" aria-live="polite"></div>
 
+  <script src="vendor/leaflet.js"></script>
   <script src="logika.js"></script>
   <script src="app.js"></script>
 </body>

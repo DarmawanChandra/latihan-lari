@@ -27,6 +27,9 @@ let sedangMintaKunci = false;
 let suara = null;             // AudioContext untuk bunyi bip
 let acaraPasang = null;       // untuk tombol "Pasang"
 let waktuKabar = null;
+let petaHasil = null;         // peta kecil di jendela hasil
+let petaBesar = null;         // peta di jendela Rute
+let petaLangsung = false;     // true kalau jendela Rute menampilkan latihan yang sedang berjalan
 
 /* ================================================================
    BANTUAN KECIL
@@ -186,6 +189,8 @@ function bukaLatihan(jenis, sesi, pulihan) {
     garis: sesi ? Lari.garisWaktu(sesi.bagian) : null,
     jam: Lari.jamBaru(),
     rekam: Lari.rekamBaru(),
+    rute: [],                        // titik untuk peta: daftar potongan [[lat, lon], ...]
+    posisi: null,                    // titik GPS terakhir [lat, lon]
     pakaiGps: false,                 // true kalau GPS sudah dapat titik saat latihan
     kmDiucap: 0,
     setengahDiucap: false,
@@ -201,6 +206,7 @@ function bukaLatihan(jenis, sesi, pulihan) {
   if (pulihan) {
     latihan.jam = Lari.jamPulihkan(pulihan.jam, pulihan.disimpanPada);
     latihan.rekam.jarak = Lari.angka(pulihan.meter);
+    latihan.rute = Lari.rapikanRute(pulihan.rute);
     latihan.pakaiGps = !!pulihan.pakaiGps;
     latihan.kmDiucap = Lari.angka(pulihan.kmDiucap);
     latihan.setengahDiucap = !!pulihan.setengahDiucap;
@@ -310,6 +316,7 @@ function gambarLatihan(kini) {
   el('lt-gps').dataset.warna = g.warna;
   teks('lt-utama', st === 'siap' ? 'Mulai' : st === 'aktif' ? 'Jeda' : 'Lanjut');
   el('lt-lewati').hidden = lt.jenis !== 'program' || st === 'siap';
+  el('lt-peta').hidden = lt.gps.status === 'mati' || lt.gps.status === 'tidak-ada' || lt.gps.status === 'ditolak';
   teks('lt-selesai', st === 'siap' ? 'Batal' : 'Selesai');
 }
 
@@ -329,6 +336,7 @@ function gambarTuntas() {
   teks('lt-pace', h.meter != null ? Lari.paceTeks(Lari.pace(h.detik, h.meter)) : '–');
   teks('lt-utama', 'Simpan hasil');
   el('lt-lewati').hidden = true;
+  el('lt-peta').hidden = true;
   teks('lt-selesai', 'Buang');
 }
 
@@ -336,7 +344,7 @@ function gambarTuntas() {
 function tombolUtama() {
   const lt = latihan;
   if (!lt) return;
-  if (lt.hasil) { bukaJendela(el('dlg-hasil')); return; }
+  if (lt.hasil) { bukaJendela(el('dlg-hasil')); if (petaHasil) petaHasil.peta.invalidateSize(); return; }
   const kini = Date.now();
   siapkanSuara(); // suara harus "dinyalakan" saat jari menekan tombol (aturan browser HP)
   const st = lt.jam.status;
@@ -390,6 +398,7 @@ function akhiriLatihan(tuntas) {
   lt.detak = null;
   hentikanGps();
   lepasLayar();
+  tutupPeta();
   // Simpanan latihan berjalan baru dihapus setelah hasil disimpan / dibuang
   if (tuntas) {
     bip(1320, 0.6);
@@ -407,7 +416,8 @@ function akhiriLatihan(tuntas) {
     meter: lt.pakaiGps ? Math.round(lt.rekam.jarak) : null,
     tuntas: tuntas,
     rasa: null,
-    catatan: ''
+    catatan: '',
+    rute: Lari.ringkasRute(lt.rute) // titik yang hampir segaris dibuang supaya hemat memori
   };
   gambarTuntas();
   bukaHasil();
@@ -420,6 +430,8 @@ function tutupLatihan() {
   hentikanGps();
   lepasLayar();
   hapusCuplikan();
+  tutupPeta();
+  hapusPetaHasil();
   latihan = null;
   el('layar-latihan').hidden = true;
   document.body.classList.remove('sedang-latihan');
@@ -440,6 +452,7 @@ function bukaHasil() {
   document.querySelectorAll('input[name="rasa"]').forEach(r => { r.checked = false; });
   el('hasil-catatan').value = '';
   bukaJendela(el('dlg-hasil'));
+  gambarPetaHasil(h.rute); // sesudah jendela terbuka, supaya ukuran peta terbaca
 }
 
 function simpanHasil() {
@@ -504,10 +517,14 @@ function terimaLokasi(pos) {
   lt.gps.meleset = c.accuracy;
   lt.gps.terakhir = kini;
   lt.gps.status = c.accuracy <= Lari.GPS_MAKS_MELESET ? 'bagus' : 'lemah';
+  lt.posisi = [c.latitude, c.longitude];
   if (lt.jam.status === 'aktif') {
-    const hasil = Lari.rekamTitik(lt.rekam, { lat: c.latitude, lon: c.longitude, meleset: c.accuracy, waktu: kini });
+    const t = { lat: c.latitude, lon: c.longitude, meleset: c.accuracy, waktu: kini };
+    const hasil = Lari.rekamTitik(lt.rekam, t);
     if (hasil === 'patokan' || hasil === 'tambah' || hasil === 'patokan-baru') lt.pakaiGps = true;
+    Lari.catatRute(lt.rute, hasil, t); // titik yang dihitung jaraknya juga digambar di peta
   }
+  perbaruiPetaLangsung();
 }
 
 function gagalLokasi(err) {
@@ -519,6 +536,150 @@ function gagalLokasi(err) {
   } else if (lt.gps.status !== 'bagus' && lt.gps.status !== 'lemah') {
     lt.gps.status = 'mencari';
   }
+}
+
+/* ================================================================
+   PETA RUTE (Leaflet + gambar peta OpenStreetMap)
+   Garis rute tersimpan di HP, jadi tetap ada tanpa internet.
+   Gambar petanya (jalan, bangunan) diambil dari internet.
+   ================================================================ */
+const WARNA_PETA = { rute: '#c2410c', mulai: '#15803d', selesai: '#1c1917', posisi: '#1d4ed8' };
+
+function adaRute(rute) { return Lari.jumlahTitik(rute) >= 2; }
+
+// Siapkan peta kosong di wadah. diam = peta kecil yang tidak bisa digeser.
+function buatPeta(wadah, diam, pesan) {
+  if (typeof L === 'undefined') {
+    wadah.innerHTML = '<p class="peta-gagal">Peta tidak bisa dimuat. Tutup lalu buka lagi aplikasinya.</p>';
+    return null;
+  }
+  const peta = L.map(wadah, {
+    zoomControl: !diam, dragging: !diam, touchZoom: !diam, doubleClickZoom: !diam,
+    scrollWheelZoom: !diam, boxZoom: !diam, keyboard: !diam, attributionControl: false
+  });
+  // Link dibuka di tab baru supaya aplikasi (dan latihan) tidak tertutup
+  L.control.attribution({ prefix: '<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>' }).addTo(peta);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+  }).on('tileerror', () => {
+    if (pesan && pesan.hidden) {
+      pesan.textContent = 'Gambar peta butuh internet. Garis rute tetap tersimpan.';
+      pesan.hidden = false;
+    }
+  }).addTo(peta);
+  const m = { peta: peta, awal: null, akhir: null, posisi: null, ikut: true };
+  // Garis putih di bawah garis oranye supaya rute jelas di atas jalan
+  m.alas = L.polyline([], { color: '#fff', weight: 9, opacity: 0.85, interactive: false }).addTo(peta);
+  m.garis = L.polyline([], { color: WARNA_PETA.rute, weight: 5, opacity: 0.95, interactive: false }).addTo(peta);
+  peta.on('dragstart', () => { m.ikut = false; }); // peta digeser sendiri: berhenti mengikuti posisi
+  return m;
+}
+
+// Pasang atau pindahkan satu titik bulat
+function taruhTitik(m, tanda, p, warna) {
+  if (!p) return tanda;
+  if (tanda) return tanda.setLatLng(p);
+  return L.circleMarker(p, { radius: 7, color: '#fff', weight: 3, fillColor: warna, fillOpacity: 1, interactive: false }).addTo(m.peta);
+}
+
+// Gambar rute, titik mulai, titik selesai, dan posisi sekarang
+function isiPeta(m, rute, posisi, tandaSelesai) {
+  const semua = rute.flat();
+  m.alas.setLatLngs(rute);
+  m.garis.setLatLngs(rute);
+  m.awal = taruhTitik(m, m.awal, semua[0], WARNA_PETA.mulai);
+  if (tandaSelesai && semua.length > 1) m.akhir = taruhTitik(m, m.akhir, semua[semua.length - 1], WARNA_PETA.selesai);
+  m.posisi = taruhTitik(m, m.posisi, posisi, WARNA_PETA.posisi);
+}
+
+// Atur besar peta supaya seluruh rute terlihat
+function pasPandang(m, rute, posisi) {
+  const semua = rute.flat();
+  if (posisi) semua.push(posisi);
+  if (semua.length) m.peta.fitBounds(L.latLngBounds(semua), { padding: [24, 24], maxZoom: 17, animate: false });
+}
+
+// Peta kecil di jendela hasil
+function gambarPetaHasil(rute) {
+  hapusPetaHasil();
+  const wadah = el('hasil-peta');
+  wadah.hidden = !adaRute(rute);
+  if (wadah.hidden) return;
+  petaHasil = buatPeta(wadah, true, el('hasil-peta-pesan'));
+  if (!petaHasil) return;
+  isiPeta(petaHasil, rute, null, true);
+  pasPandang(petaHasil, rute, null);
+}
+
+function hapusPetaHasil() {
+  if (petaHasil) { petaHasil.peta.remove(); petaHasil = null; }
+  el('hasil-peta').textContent = '';
+  el('hasil-peta-pesan').hidden = true;
+}
+
+// Jendela Rute: catatan di riwayat (tetap) atau latihan yang sedang berjalan (langsung)
+function bukaPeta(judul, sub, rute, langsung) {
+  hapusPetaBesar();
+  teks('peta-judul', judul);
+  teks('peta-sub', sub);
+  el('ket-akhir').hidden = langsung;
+  el('ket-posisi').hidden = !langsung;
+  bukaJendela(el('dlg-peta'));
+  petaLangsung = langsung;
+  gambarPetaBesar(rute, langsung ? latihan.posisi : null, !langsung);
+}
+
+function gambarPetaBesar(rute, posisi, tandaSelesai) {
+  const wadah = el('peta-besar'), pesan = el('peta-pesan');
+  const ada = Lari.jumlahTitik(rute) > 0 || !!posisi;
+  wadah.hidden = !ada;
+  pesan.textContent = ada ? '' : 'Menunggu sinyal GPS. Peta muncul sendiri setelah sinyal didapat.';
+  pesan.hidden = ada;
+  if (!ada) return;
+  petaBesar = buatPeta(wadah, false, pesan);
+  if (!petaBesar) return;
+  isiPeta(petaBesar, rute, posisi, tandaSelesai);
+  pasPandang(petaBesar, rute, posisi);
+}
+
+function bukaPetaRiwayat(id) {
+  const c = data.riwayat.find(x => x.id === id);
+  if (!c || !adaRute(c.rute)) return;
+  const sub = [Lari.tanggalTeks(new Date(c.tanggal), new Date())];
+  if (c.meter != null) sub.push(Lari.km(c.meter) + ' km');
+  sub.push(Lari.jamDigital(c.detik));
+  bukaPeta(c.judul, sub.join(' · '), c.rute, false);
+}
+
+function bukaPetaLangsung() {
+  const lt = latihan;
+  if (!lt || lt.hasil) return;
+  bukaPeta('Rute sekarang', lt.sesi ? lt.sesi.judul : 'Lari Bebas', lt.rute, true);
+}
+
+// Dipanggil setiap ada titik GPS baru
+function perbaruiPetaLangsung() {
+  const lt = latihan;
+  if (!petaLangsung || !lt) return;
+  if (!petaBesar) {
+    if (el('peta-besar').hidden) gambarPetaBesar(lt.rute, lt.posisi, false); // sinyal pertama: buat peta
+    return;
+  }
+  isiPeta(petaBesar, lt.rute, lt.posisi, false);
+  // Ikuti posisi kalau keluar dari layar (kecuali peta sedang digeser sendiri)
+  if (petaBesar.ikut && lt.posisi && !petaBesar.peta.getBounds().contains(lt.posisi)) petaBesar.peta.panTo(lt.posisi);
+}
+
+function hapusPetaBesar() {
+  if (petaBesar) { petaBesar.peta.remove(); petaBesar = null; }
+  petaLangsung = false;
+  el('peta-besar').textContent = '';
+}
+
+function tutupPeta() {
+  tutupJendela(el('dlg-peta'));
+  hapusPetaBesar();
 }
 
 /* ================================================================
@@ -611,6 +772,7 @@ function simpanCuplikan(paksa) {
     sesi: lt.sesi ? lt.sesi.id : null,
     jam: lt.jam,
     meter: lt.rekam.jarak,
+    rute: lt.rute,
     pakaiGps: lt.pakaiGps,
     kmDiucap: lt.kmDiucap,
     setengahDiucap: lt.setengahDiucap,
@@ -683,6 +845,7 @@ function tampilRiwayat() {
       '<p class="angka-catatan">' + angka.map(esc).join(' · ') + '</p>' +
       (c.rasa && RASA[c.rasa] ? '<p class="info-kecil">Rasanya: ' + RASA[c.rasa] + '</p>' : '') +
       (c.catatan ? '<p class="isi-catatan">' + esc(c.catatan) + '</p>' : '') +
+      (adaRute(c.rute) ? '<button type="button" class="btn kecil btn-rute" data-rute="' + esc(c.id) + '">Lihat rute</button>' : '') +
       '</article>';
   }).join('');
 }
@@ -786,12 +949,13 @@ function pasangAplikasi() {
 function pasangPendengar() {
   // Tombol yang dibuat ulang (daftar sesi, menu, hapus catatan)
   document.addEventListener('click', e => {
-    const t = e.target.closest('[data-tab], [data-mulai], [data-detail], [data-hapus]');
+    const t = e.target.closest('[data-tab], [data-mulai], [data-detail], [data-hapus], [data-rute]');
     if (!t) return;
     if (t.dataset.tab) bukaTab(t.dataset.tab);
     else if (t.dataset.mulai) mulaiSesi(t.dataset.mulai);
     else if (t.dataset.detail) bukaDetail(t.dataset.detail);
     else if (t.dataset.hapus) hapusCatatan(t.dataset.hapus);
+    else if (t.dataset.rute) bukaPetaRiwayat(t.dataset.rute);
   });
 
   // Halaman Latihan
@@ -811,6 +975,13 @@ function pasangPendengar() {
   el('lt-utama').addEventListener('click', tombolUtama);
   el('lt-lewati').addEventListener('click', tombolLewati);
   el('lt-selesai').addEventListener('click', tombolSelesai);
+  el('lt-peta').addEventListener('click', bukaPetaLangsung);
+
+  // Jendela peta rute
+  const dlgPeta = el('dlg-peta');
+  el('peta-tutup').addEventListener('click', tutupPeta);
+  dlgPeta.addEventListener('click', e => { if (e.target === dlgPeta) tutupPeta(); });
+  dlgPeta.addEventListener('close', () => { if (!dlgPeta.open) hapusPetaBesar(); });
 
   // Jendela hasil: tidak boleh tertutup tanpa Simpan / Buang
   const dlgHasil = el('dlg-hasil');

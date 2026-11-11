@@ -405,3 +405,15 @@ body.sedang-latihan .kabar { top: calc(64px + env(safe-area-inset-top)); bottom:
 @media (prefers-reduced-motion: reduce) {
   .layar-latihan, .batang .isi, .saklar, .saklar::after { transition: none; }
 }
+
+/* ===== Peta rute ===== */
+.peta { height: 180px; margin: 0 0 14px; border-radius: 12px; overflow: hidden; background: #e7e5e4; }
+.peta.besar { height: min(60vh, 520px); min-height: 220px; margin: 10px 0 8px; }
+.peta.leaflet-container { font: inherit; font-size: .75rem; }
+.peta-gagal { margin: 0; padding: 24px 16px; color: var(--abu); text-align: center; font-size: .9rem; }
+#dlg-peta { width: min(94vw, 640px); }
+.peta-ket { display: flex; gap: 16px; margin: 0; font-size: .85rem; color: var(--abu); }
+.titik-ket::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 50%; background: var(--teks); box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--garis); vertical-align: -1px; }
+.titik-ket[data-warna="hijau"]::before { background: var(--hijau); }
+.titik-ket[data-warna="biru"]::before { background: var(--biru); }
+.btn-rute { margin-top: 10px; }

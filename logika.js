@@ -404,7 +404,8 @@ const Lari = (function () {
       meter: c.meter == null ? null : Math.round(c.meter),
       tuntas: !!c.tuntas,
       rasa: c.rasa === 'ringan' || c.rasa === 'pas' || c.rasa === 'berat' ? c.rasa : null,
-      catatan: typeof c.catatan === 'string' ? c.catatan.slice(0, 500) : ''
+      catatan: typeof c.catatan === 'string' ? c.catatan.slice(0, 500) : '',
+      rute: rapikanRute(c.rute)
     };
   }
 
@@ -450,13 +451,100 @@ const Lari = (function () {
     return umur > -60000 && umur < 12 * 3600 * 1000; // lebih dari 12 jam: sudah basi
   }
 
+  /* ================================================================
+     RUTE UNTUK PETA
+     Rute = daftar potongan, potongan = daftar titik [lat, lon].
+     Potongan baru dimulai setelah jeda atau saat GPS loncat jauh,
+     supaya peta tidak menggambar garis yang tidak dilewati.
+     ================================================================ */
+  const RUTE_MAKS_TITIK = 6000;  // cukup untuk lari lebih dari 3 jam
+  const RUTE_TOLERANSI = 3;      // meter. Titik yang hampir segaris dibuang saat disimpan.
+
+  function bulat5(x) { return Math.round(x * 1e5) / 1e5; } // 5 angka di belakang koma = sekitar 1 meter
+
+  function titikSah(p) {
+    return Array.isArray(p) && p.length >= 2 &&
+      typeof p[0] === 'number' && typeof p[1] === 'number' &&
+      isFinite(p[0]) && isFinite(p[1]) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180;
+  }
+
+  function jumlahTitik(rute) {
+    return Array.isArray(rute) ? rute.reduce((s, p) => s + (Array.isArray(p) ? p.length : 0), 0) : 0;
+  }
+
+  // Catat titik yang dipakai menghitung jarak. hasil = jawaban rekamTitik.
+  function catatRute(rute, hasil, t) {
+    if (hasil !== 'patokan' && hasil !== 'tambah' && hasil !== 'patokan-baru') return false;
+    if (jumlahTitik(rute) >= RUTE_MAKS_TITIK) return false;
+    const titik = [bulat5(t.lat), bulat5(t.lon)];
+    if (hasil === 'tambah' && rute.length) rute[rute.length - 1].push(titik);
+    else rute.push([titik]);
+    return true;
+  }
+
+  // Periksa rute dari HP atau file cadangan. Titik yang rusak dibuang.
+  function rapikanRute(rute) {
+    const hasil = [];
+    if (!Array.isArray(rute)) return hasil;
+    let sisa = RUTE_MAKS_TITIK;
+    for (const potongan of rute) {
+      if (!Array.isArray(potongan)) continue;
+      const bersih = [];
+      for (const p of potongan) {
+        if (sisa <= 0) break;
+        if (titikSah(p)) { bersih.push([bulat5(p[0]), bulat5(p[1])]); sisa--; }
+      }
+      if (bersih.length) hasil.push(bersih);
+      if (sisa <= 0) break;
+    }
+    return hasil;
+  }
+
+  // Jarak (meter) titik p ke ruas a-b. Semua titik dalam meter [x, y].
+  function jarakKeRuas(p, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const kuadrat = dx * dx + dy * dy;
+    const u = kuadrat ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / kuadrat)) : 0;
+    return Math.hypot(p[0] - a[0] - u * dx, p[1] - a[1] - u * dy);
+  }
+
+  // Buang titik yang hampir segaris (cara Douglas-Peucker), supaya hemat memori HP
+  function ringkasPotongan(titik, toleransi) {
+    const n = titik.length;
+    if (n <= 2) return titik.map(p => [p[0], p[1]]);
+    const kx = 111320 * Math.cos(titik[0][0] * Math.PI / 180), ky = 110574;
+    const xy = titik.map(p => [p[1] * kx, p[0] * ky]);
+    const pakai = new Array(n).fill(false);
+    pakai[0] = pakai[n - 1] = true;
+    const antre = [[0, n - 1]];
+    while (antre.length) {
+      const [a, b] = antre.pop();
+      let terjauh = 0, idx = -1;
+      for (let i = a + 1; i < b; i++) {
+        const d = jarakKeRuas(xy[i], xy[a], xy[b]);
+        if (d > terjauh) { terjauh = d; idx = i; }
+      }
+      if (idx > 0 && terjauh > toleransi) {
+        pakai[idx] = true;
+        antre.push([a, idx], [idx, b]);
+      }
+    }
+    return titik.filter((p, i) => pakai[i]).map(p => [p[0], p[1]]);
+  }
+
+  // Rute yang siap disimpan: rapi dan ringkas
+  function ringkasRute(rute) {
+    return rapikanRute(rute).map(p => ringkasPotongan(p, RUTE_TOLERANSI));
+  }
+
   return {
-    NAMA, PROGRAM, GPS_MAKS_MELESET,
+    NAMA, PROGRAM, GPS_MAKS_MELESET, RUTE_MAKS_TITIK,
     angka, jamDigital, durasiPendek, durasiUcap, totalMenit, lamaTotal, km, pace, paceTeks, tanggalTeks,
     cariSesi, sesiBerikut, ringkasInti,
     jamBaru, waktuAktif, waktuProgram, jamMulai, jamJeda, jamSelesai, jamLompatKe, jamPulihkan,
     garisWaktu, posisi, infoBerikut, ucapanBagian, ucapanKm,
     jarakMeter, rekamBaru, rekamTitik, infoGps,
+    catatRute, rapikanRute, ringkasRute, ringkasPotongan, jumlahTitik,
     awalMinggu, perMinggu, jumlahkan, grafikMinggu,
     dataBaru, catatanSah, rapikanData, bacaCadangan, cuplikanSah
   };
