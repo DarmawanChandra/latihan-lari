@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Program lari 8 minggu untuk pemula: timer lari-jalan dengan suara, jarak GPS, dan catatan latihan.">
+  <meta name="theme-color" content="#c2410c">
+  <!-- Supaya bisa dipasang di layar utama HP seperti aplikasi -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Latihan Lari">
+  <link rel="icon" href="ikon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="ikon-192.png">
+  <title>Latihan Lari</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Bagian atas: judul menu yang sedang dibuka -->
+  <header class="atas">
+    <h1 id="judul-halaman">Latihan Lari</h1>
+  </header>
+
+  <main>
+    <!-- ===== LATIHAN: sesi berikutnya dan daftar program ===== -->
+    <section id="tab-latihan" class="halaman aktif">
+      <!-- Muncul kalau aplikasi tertutup sebelum latihan selesai -->
+      <div class="kotak lanjut" id="kotak-lanjut" hidden>
+        <p><b>Ada latihan yang belum selesai</b><br><span id="teks-lanjut"></span></p>
+        <div class="baris-tombol">
+          <button type="button" class="btn utama" id="btn-lanjut">Lanjutkan</button>
+          <button type="button" class="btn" id="btn-buang-lanjut">Buang</button>
+        </div>
+      </div>
+
+      <div class="kotak kartu-berikut" id="kartu-berikut"></div>
+      <button type="button" class="btn penuh" id="btn-bebas">Lari Bebas (tanpa program)</button>
+
+      <div class="kotak pasang" id="kotak-pasang" hidden>
+        <p>Pasang Latihan Lari di layar HP supaya bisa dibuka seperti aplikasi biasa.</p>
+        <button type="button" class="btn utama" id="btn-pasang">Pasang</button>
+      </div>
+
+      <h2>Program 8 minggu</h2>
+      <p class="info">Latihan 3 kali seminggu, selang sehari (misalnya Senin, Rabu, Jumat). Kalau terasa berat, ulangi sesi yang sama. Kalau dada sakit, pusing, atau sesak berat, berhenti dan istirahat.</p>
+      <div class="kemajuan">
+        <span id="teks-kemajuan"></span>
+        <div class="batang"><div class="isi" id="isi-kemajuan"></div></div>
+      </div>
+      <div id="daftar-program"></div>
+    </section>
+
+    <!-- ===== RIWAYAT: total, grafik, catatan tiap latihan ===== -->
+    <section id="tab-riwayat" class="halaman">
+      <div class="kartu-angka total">
+        <div class="angka"><span>Latihan</span><b id="angka-kali">0</b></div>
+        <div class="angka"><span>Jarak (km)</span><b id="angka-jarak">0,00</b></div>
+        <div class="angka"><span>Waktu</span><b id="angka-lama">0 mnt</b></div>
+      </div>
+      <h2>Menit latihan per minggu</h2>
+      <div id="isi-grafik"></div>
+      <p class="info-kecil">Angka di bawah batang = tanggal Senin tiap minggu.</p>
+      <h2>Catatan latihan</h2>
+      <div id="daftar-riwayat"></div>
+    </section>
+
+    <!-- ===== PENGATURAN ===== -->
+    <section id="tab-atur" class="halaman">
+      <div class="kotak">
+        <label class="baris-atur"><span><b>Suara pemandu</b><small>Aba-aba "lari" dan "jalan"</small></span><input type="checkbox" class="saklar" role="switch" data-atur="suara"></label>
+        <label class="baris-atur"><span><b>Bunyi bip</b><small>Hitung mundur 3 detik sebelum ganti</small></span><input type="checkbox" class="saklar" role="switch" data-atur="bip"></label>
+        <label class="baris-atur"><span><b>Getar</b><small>HP bergetar saat ganti lari atau jalan</small></span><input type="checkbox" class="saklar" role="switch" data-atur="getar"></label>
+        <label class="baris-atur"><span><b>GPS</b><small>Hitung jarak dan pace</small></span><input type="checkbox" class="saklar" role="switch" data-atur="gps"></label>
+      </div>
+      <button type="button" class="btn penuh" id="btn-tes-suara">Tes suara</button>
+
+      <h2>Supaya lancar</h2>
+      <ul class="kotak daftar-tips">
+        <li>Biarkan aplikasi tetap terbuka saat latihan. Layar dibuat tetap menyala.</li>
+        <li>Kalau pindah aplikasi atau layar mati, aba-aba dan GPS bisa berhenti.</li>
+        <li>Izinkan lokasi saat diminta, supaya jarak bisa dihitung.</li>
+        <li>Pasang di layar HP: di Chrome ketuk &#8942; lalu "Tambahkan ke layar utama".</li>
+      </ul>
+
+      <!-- Cadangan data: simpan ke file / pulihkan dari file -->
+      <div class="kotak">
+        <h3>Cadangan data</h3>
+        <p class="info-kecil">Data hanya tersimpan di HP ini. Simpan ke file supaya aman kalau ganti HP atau data browser terhapus.</p>
+        <div class="baris-tombol">
+          <button type="button" class="btn utama" id="btn-simpan-cadangan">Simpan cadangan</button>
+          <button type="button" class="btn" id="btn-pulihkan">Pulihkan dari file</button>
+        </div>
+        <input type="file" id="file-cadangan" class="tak-terlihat" accept=".json,application/json" tabindex="-1" aria-hidden="true">
+        <p class="info-kecil" id="pesan-cadangan" hidden></p>
+      </div>
+
+      <button type="button" class="btn bahaya penuh" id="btn-hapus-semua">Hapus semua data</button>
+      <p class="info-kecil tengah">Latihan Lari versi 1</p>
+    </section>
+  </main>
+
+  <!-- Menu bawah -->
+  <nav class="menu-bawah" aria-label="Menu">
+    <button type="button" data-tab="latihan" class="aktif" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/></svg>
+      <span>Latihan</span>
+    </button>
+    <button type="button" data-tab="riwayat">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3v18h18M7 15l4-4 3 3 5-6"/></svg>
+      <span>Riwayat</span>
+    </button>
+    <button type="button" data-tab="atur">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+      <span>Pengaturan</span>
+    </button>
+  </nav>
+
+  <!-- ===== LAYAR LATIHAN (penuh satu layar) ===== -->
+  <div id="layar-latihan" class="layar-latihan" data-fase="siap" hidden>
+    <div class="lt-atas">
+      <b id="lt-judul"></b>
+      <span id="lt-gps" class="lt-gps" data-warna="abu"></span>
+    </div>
+    <div class="lt-tengah">
+      <p id="lt-fase" class="lt-fase" aria-live="polite"></p>
+      <p id="lt-besar" class="lt-besar">0:00</p>
+      <p id="lt-bawah" class="lt-bawah"></p>
+    </div>
+    <div id="lt-kemajuan" class="lt-kemajuan">
+      <div class="batang"><div class="isi" id="lt-isi"></div></div>
+      <span id="lt-sisa"></span>
+    </div>
+    <div class="lt-angka">
+      <div id="lt-stat-waktu"><b id="lt-waktu">0:00</b><span>Waktu</span></div>
+      <div><b id="lt-jarak">–</b><span>km</span></div>
+      <div><b id="lt-pace">–</b><span>menit/km</span></div>
+    </div>
+    <div class="lt-tombol">
+      <button type="button" id="lt-utama" class="lt-utama">Mulai</button>
+      <div class="lt-tombol-kecil">
+        <button type="button" id="lt-lewati">Lewati</button>
+        <button type="button" id="lt-selesai">Selesai</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Jendela isi satu sesi -->
+  <dialog id="dlg-sesi">
+    <div class="isi-dialog">
+      <h3 id="sesi-judul"></h3>
+      <p class="info-kecil" id="sesi-ringkas"></p>
+      <ol class="urutan" id="sesi-urutan"></ol>
+      <div class="baris-tombol">
+        <button type="button" class="btn utama penuh" id="sesi-mulai">Mulai sesi ini</button>
+        <button type="button" class="btn" id="sesi-tandai">Tandai sudah selesai</button>
+        <button type="button" class="btn" id="sesi-tutup">Tutup</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Jendela hasil latihan -->
+  <dialog id="dlg-hasil">
+    <div class="isi-dialog">
+      <h3 id="hasil-judul">Latihan selesai!</h3>
+      <p class="info-kecil" id="hasil-sub"></p>
+      <div class="kartu-angka">
+        <div class="angka"><span>Waktu</span><b id="hasil-waktu">0:00</b></div>
+        <div class="angka"><span>Jarak</span><b id="hasil-jarak">–</b></div>
+        <div class="angka"><span>Pace /km</span><b id="hasil-pace">–</b></div>
+      </div>
+      <fieldset class="pilih-rasa">
+        <legend>Rasanya gimana?</legend>
+        <label><input type="radio" name="rasa" value="ringan"><span>Ringan</span></label>
+        <label><input type="radio" name="rasa" value="pas"><span>Pas</span></label>
+        <label><input type="radio" name="rasa" value="berat"><span>Berat</span></label>
+      </fieldset>
+      <label>Catatan (boleh kosong)
+        <textarea id="hasil-catatan" rows="2" maxlength="500" placeholder="Contoh: lari di taman, kaki agak pegal"></textarea>
+      </label>
+      <label class="baris-centang" id="baris-tandai"><input type="checkbox" id="hasil-tandai"> Tandai sesi ini sudah selesai</label>
+      <div class="baris-tombol kanan">
+        <button type="button" class="btn" id="hasil-buang">Buang</button>
+        <button type="button" class="btn utama" id="hasil-simpan">Simpan</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Pesan singkat di bawah layar -->
+  <div id="kabar" class="kabar" role="status" aria-live="polite"></div>
+
+  <script src="logika.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
