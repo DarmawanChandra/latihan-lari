@@ -9,7 +9,7 @@
      lemah di luar rumah), pakai salinan di cache.
    Naikkan VERSI setiap ada perubahan file aplikasi.
    ================================================================ */
-const VERSI = 'latihan-lari-v2';
+const VERSI = 'latihan-lari-v3';
 const FILE = ['./', 'index.html', 'style.css', 'logika.js', 'app.js', 'manifest.webmanifest',
   'ikon.svg', 'ikon-192.png', 'ikon-512.png', 'vendor/leaflet.js', 'vendor/leaflet.css'];
 // Gambar peta (OpenStreetMap) tidak disimpan di sini: diambil dari internet saat dibuka.
